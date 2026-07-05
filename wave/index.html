@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>파동 간섭 시뮬레이션</title>
+<style>
+  :root{
+    --bg:#071019;
+    --panel:#0d1b2a;
+    --grid:#12283b;
+    --cyan:#4fd1c5;
+    --amber:#f6ad55;
+    --sum:#e6f1ff;
+    --text:#c9d6e3;
+    --muted:#5f7a91;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Courier New', ui-monospace, monospace;
+    padding:20px;
+  }
+  h1{
+    font-size:15px;
+    letter-spacing:2px;
+    color:var(--muted);
+    text-transform:uppercase;
+    margin:0 0 4px 0;
+    font-weight:600;
+  }
+  .subtitle{
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:16px;
+  }
+  .layout{
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+    align-items:flex-start;
+  }
+  .field-wrap{
+    position:relative;
+    border:1px solid var(--grid);
+    background:#000;
+    border-radius:4px;
+    overflow:hidden;
+  }
+  canvas#field{
+    display:block;
+    cursor:grab;
+    image-rendering:pixelated;
+  }
+  .badge{
+    position:absolute;
+    top:8px;
+    left:8px;
+    font-size:11px;
+    color:var(--muted);
+    background:rgba(7,16,25,0.7);
+    padding:3px 8px;
+    border-radius:3px;
+    border:1px solid var(--grid);
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--grid);
+    border-radius:4px;
+    padding:16px;
+    min-width:260px;
+    flex:1;
+  }
+  .panel h2{
+    font-size:11px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    color:var(--muted);
+    margin:0 0 12px 0;
+    border-bottom:1px solid var(--grid);
+    padding-bottom:8px;
+  }
+  .row{
+    margin-bottom:14px;
+  }
+  .row label{
+    display:flex;
+    justify-content:space-between;
+    font-size:12px;
+    margin-bottom:5px;
+  }
+  .row label span.val{
+    color:var(--cyan);
+  }
+  input[type=range]{
+    width:100%;
+    accent-color:var(--cyan);
+  }
+  button{
+    background:transparent;
+    border:1px solid var(--cyan);
+    color:var(--cyan);
+    font-family:inherit;
+    font-size:12px;
+    padding:7px 14px;
+    border-radius:3px;
+    cursor:pointer;
+    letter-spacing:1px;
+  }
+  button:hover{
+    background:rgba(79,209,197,0.12);
+  }
+  .btnrow{
+    display:flex;
+    gap:8px;
+    margin-top:6px;
+  }
+  .legend{
+    display:flex;
+    gap:14px;
+    font-size:11px;
+    color:var(--muted);
+    margin-top:10px;
+    flex-wrap:wrap;
+  }
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+  .graph-wrap{
+    border:1px solid var(--grid);
+    border-radius:4px;
+    background:#000;
+    margin-top:16px;
+  }
+  .note{
+    font-size:11px;
+    color:var(--muted);
+    line-height:1.6;
+    margin-top:10px;
+  }
+  .formula{
+    color:var(--sum);
+    font-size:12px;
+    background:#000;
+    padding:8px 10px;
+    border-radius:3px;
+    margin-top:8px;
+    border:1px solid var(--grid);
+  }
+</style>
+</head>
+<body>
+
+<h1>Wave Interference Lab</h1>
+<div class="subtitle">두 점파원의 중첩 &mdash; y = A·sin(kr − ωt) 를 이용한 보강·상쇄 간섭 시각화</div>
+
+<div class="layout">
+
+  <div>
+    <div class="field-wrap">
+      <canvas id="field" width="480" height="340"></canvas>
+      <div class="badge">소스를 드래그해서 위치를 옮길 수 있습니다</div>
+    </div>
+
+    <div class="graph-wrap">
+      <canvas id="graph" width="480" height="150"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>매개변수</h2>
+
+    <div class="row">
+      <label>파장 λ <span class="val" id="v-wl">40</span> px</label>
+      <input type="range" id="wl" min="15" max="90" value="40">
+    </div>
+
+    <div class="row">
+      <label>파원 간격 d <span class="val" id="v-d">140</span> px</label>
+      <input type="range" id="d" min="20" max="300" value="140">
+    </div>
+
+    <div class="row">
+      <label>위상차 Δφ <span class="val" id="v-phase">0</span> °</label>
+      <input type="range" id="phase" min="0" max="360" value="0">
+    </div>
+
+    <div class="row">
+      <label>진행 속도 <span class="val" id="v-speed">1.0</span></label>
+      <input type="range" id="speed" min="0" max="30" value="10">
+    </div>
+
+    <div class="btnrow">
+      <button id="playBtn">일시정지</button>
+      <button id="resetBtn">초기화</button>
+    </div>
+
+    <div class="legend">
+      <span><i class="dot" style="background:var(--cyan)"></i>파원 1: sin(kr₁ − ωt)</span>
+      <span><i class="dot" style="background:var(--amber)"></i>파원 2: sin(kr₂ − ωt + Δφ)</span>
+      <span><i class="dot" style="background:var(--sum)"></i>합성파 (중첩)</span>
+    </div>
+
+    <div class="formula">
+      경로차 Δr = r₂ − r₁<br>
+      보강간섭: Δr = mλ (m = 0, ±1, ±2 …)<br>
+      상쇄간섭: Δr = (m + ½)λ
+    </div>
+
+    <div class="note">
+      위쪽 필드는 2차원 평면에서 두 원형파(sin(kr−ωt))가 만드는 순간 진폭을 색으로 표현합니다.
+      밝은 영역은 마루-마루 또는 골-골이 겹치는 보강간섭, 어두운 방사형 줄무늬는 마루-골이 상쇄되는 지점입니다.
+      아래 그래프는 두 파원을 잇는 직선을 따라 각 파동과 합성파의 단면을 실시간으로 보여줍니다.
+    </div>
+  </div>
+
+</div>
+
+<script>
+const fieldCanvas = document.getElementById('field');
+const fctx = fieldCanvas.getContext('2d');
+const W = fieldCanvas.width, H = fieldCanvas.height;
+
+const graphCanvas = document.getElementById('graph');
+const gctx = graphCanvas.getContext('2d');
+const GW = graphCanvas.width, GH = graphCanvas.height;
+
+// low-res simulation grid for performance
+const gridScale = 2; // pixel block size
+const gw = Math.floor(W / gridScale);
+const gh = Math.floor(H / gridScale);
+const imgData = fctx.createImageData(W, H);
+
+let source1 = { x: W/2 - 70, y: H/2 };
+let source2 = { x: W/2 + 70, y: H/2 };
+
+let wavelength = 40;
+let phaseOffsetDeg = 0;
+let speed = 1.0;
+let playing = true;
+let t = 0;
+let dragging = null;
+
+const wlEl = document.getElementById('wl');
+const dEl = document.getElementById('d');
+const phaseEl = document.getElementById('phase');
+const speedEl = document.getElementById('speed');
+const vwl = document.getElementById('v-wl');
+const vd = document.getElementById('v-d');
+const vphase = document.getElementById('v-phase');
+const vspeed = document.getElementById('v-speed');
+const playBtn = document.getElementById('playBtn');
+const resetBtn = document.getElementById('resetBtn');
+
+function updateSeparation(){
+  const d = parseFloat(dEl.value);
+  const cx = (source1.x + source2.x)/2;
+  const cy = (source1.y + source2.y)/2;
+  source1.x = cx - d/2; source1.y = cy;
+  source2.x = cx + d/2; source2.y = cy;
+  vd.textContent = d.toFixed(0);
+}
+
+wlEl.addEventListener('input', ()=>{
+  wavelength = parseFloat(wlEl.value);
+  vwl.textContent = wavelength.toFixed(0);
+});
+dEl.addEventListener('input', updateSeparation);
+phaseEl.addEventListener('input', ()=>{
+  phaseOffsetDeg = parseFloat(phaseEl.value);
+  vphase.textContent = phaseOffsetDeg.toFixed(0);
+});
+speedEl.addEventListener('input', ()=>{
+  speed = parseFloat(speedEl.value)/10;
+  vspeed.textContent = speed.toFixed(1);
+});
+playBtn.addEventListener('click', ()=>{
+  playing = !playing;
+  playBtn.textContent = playing ? '일시정지' : '재생';
+});
+resetBtn.addEventListener('click', ()=>{
+  source1 = { x: W/2 - 70, y: H/2 };
+  source2 = { x: W/2 + 70, y: H/2 };
+  wavelength = 40; phaseOffsetDeg = 0; speed = 1.0; t = 0;
+  wlEl.value = 40; dEl.value = 140; phaseEl.value = 0; speedEl.value = 10;
+  vwl.textContent = '40'; vd.textContent = '140'; vphase.textContent = '0'; vspeed.textContent = '1.0';
+  playing = true; playBtn.textContent = '일시정지';
+});
+
+// dragging sources
+fieldCanvas.addEventListener('mousedown', (e)=>{
+  const rect = fieldCanvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (W/rect.width);
+  const my = (e.clientY - rect.top) * (H/rect.height);
+  const d1 = Math.hypot(mx-source1.x, my-source1.y);
+  const d2 = Math.hypot(mx-source2.x, my-source2.y);
+  if(d1 < 14) dragging = 1;
+  else if(d2 < 14) dragging = 2;
+});
+window.addEventListener('mousemove', (e)=>{
+  if(!dragging) return;
+  const rect = fieldCanvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (W/rect.width);
+  const my = (e.clientY - rect.top) * (H/rect.height);
+  if(dragging === 1){ source1.x = Math.max(0,Math.min(W,mx)); source1.y = Math.max(0,Math.min(H,my)); }
+  if(dragging === 2){ source2.x = Math.max(0,Math.min(W,mx)); source2.y = Math.max(0,Math.min(H,my)); }
+});
+window.addEventListener('mouseup', ()=> dragging = null);
+
+function drawField(){
+  const k = 2*Math.PI / wavelength;
+  const phaseOffset = phaseOffsetDeg * Math.PI / 180;
+  const data = imgData.data;
+
+  for(let gy=0; gy<gh; gy++){
+    for(let gx=0; gx<gw; gx++){
+      const px = gx*gridScale;
+      const py = gy*gridScale;
+      const r1 = Math.hypot(px - source1.x, py - source1.y);
+      const r2 = Math.hypot(px - source2.x, py - source2.y);
+
+      const wave1 = Math.sin(k*r1 - t);
+      const wave2 = Math.sin(k*r2 - t + phaseOffset);
+      const sum = wave1 + wave2; // range -2..2
+
+      const v = sum / 2; // normalize -1..1
+      let rC, gC, bC;
+      if(v >= 0){
+        rC = Math.round(20 + v*100);
+        gC = Math.round(30 + v*210);
+        bC = Math.round(40 + v*210);
+      } else {
+        const a = -v;
+        rC = Math.round(20 + a*10);
+        gC = Math.round(30 - a*20);
+        bC = Math.round(50 + a*40);
+      }
+
+      for(let by=0; by<gridScale; by++){
+        for(let bx=0; bx<gridScale; bx++){
+          const px2 = px+bx, py2 = py+by;
+          if(px2>=W || py2>=H) continue;
+          const idx = (py2*W + px2)*4;
+          data[idx] = rC; data[idx+1] = gC; data[idx+2] = bC; data[idx+3] = 255;
+        }
+      }
+    }
+  }
+  fctx.putImageData(imgData, 0, 0);
+
+  // draw source markers
+  fctx.fillStyle = '#4fd1c5';
+  fctx.beginPath(); fctx.arc(source1.x, source1.y, 6, 0, Math.PI*2); fctx.fill();
+  fctx.strokeStyle = 'rgba(79,209,197,0.5)'; fctx.lineWidth=1.5;
+  fctx.stroke();
+
+  fctx.fillStyle = '#f6ad55';
+  fctx.beginPath(); fctx.arc(source2.x, source2.y, 6, 0, Math.PI*2); fctx.fill();
+  fctx.strokeStyle = 'rgba(246,173,85,0.5)';
+  fctx.stroke();
+
+  // baseline connecting sources (used for cross-section graph)
+  fctx.setLineDash([4,4]);
+  fctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  fctx.beginPath();
+  fctx.moveTo(0, source1.y);
+  fctx.lineTo(W, source1.y);
+  fctx.setLineDash([]);
+}
+
+function drawGraph(){
+  gctx.clearRect(0,0,GW,GH);
+  // grid line
+  gctx.strokeStyle = '#12283b';
+  gctx.lineWidth = 1;
+  gctx.beginPath();
+  gctx.moveTo(0, GH/2); gctx.lineTo(GW, GH/2);
+  gctx.stroke();
+
+  const k = 2*Math.PI / wavelength;
+  const phaseOffset = phaseOffsetDeg * Math.PI / 180;
+  const y = source1.y;
+  const amp = GH/5;
+
+  function plot(color, fn){
+    gctx.strokeStyle = color;
+    gctx.lineWidth = 1.6;
+    gctx.beginPath();
+    for(let x=0; x<GW; x++){
+      const worldX = x * (W/GW);
+      const val = fn(worldX);
+      const py = GH/2 - val*amp;
+      if(x===0) gctx.moveTo(x,py); else gctx.lineTo(x,py);
+    }
+    gctx.stroke();
+  }
+
+  plot('#4fd1c5', (worldX)=>{
+    const r1 = Math.hypot(worldX - source1.x, y - source1.y);
+    return Math.sin(k*r1 - t);
+  });
+  plot('#f6ad55', (worldX)=>{
+    const r2 = Math.hypot(worldX - source2.x, y - source2.y);
+    return Math.sin(k*r2 - t + phaseOffset);
+  });
+  plot('#e6f1ff', (worldX)=>{
+    const r1 = Math.hypot(worldX - source1.x, y - source1.y);
+    const r2 = Math.hypot(worldX - source2.x, y - source2.y);
+    return (Math.sin(k*r1 - t) + Math.sin(k*r2 - t + phaseOffset)) / 2;
+  });
+
+  gctx.fillStyle = '#5f7a91';
+  gctx.font = '11px monospace';
+  gctx.fillText('두 파원을 잇는 직선을 따른 단면 (시간에 따라 진행)', 8, 16);
+}
+
+function loop(){
+  if(playing){
+    t += 0.06 * speed * 5;
+  }
+  drawField();
+  drawGraph();
+  requestAnimationFrame(loop);
+}
+
+updateSeparation();
+loop();
+</script>
+</body>
+</html>
